@@ -1,4 +1,4 @@
-# Imports
+import os
 import requests
 from bs4 import BeautifulSoup
 import pandas as pd
@@ -7,19 +7,19 @@ import spacy
 from collections import Counter
 from flask import Flask, jsonify
 
-# Load Spacy Model
+# Load SpaCy model
 nlp = spacy.load("en_core_web_sm")
 
-# Skill list for matching
+# Define skill pattern
 skill_patterns = re.compile(r"\b(java|python|kotlin|flutter|react|angular|node|swift|ruby|php|c\+\+|c#|go|docker|kubernetes|aws|azure|gcp|restful|graphql|ai|ml|dl|cv|nlp|cloud|devops|agile|ci/cd|sql|nosql|mongodb|firebase|redux|git|jira|confluence|trello|testing|tdd|bdd|scrum|microservices|big data|data science|machine learning|deep learning|nlp|cloud computing|containerization|orchestration|api|mvc|mvvm|mvp|.net|spring|django|express|flask|ios|android|dart|objective-c|cybersecurity|penetration testing|firewalls|siem|threat intelligence|data analysis|pandas|numpy|matplotlib|seaborn|scikit-learn|tensorflow|keras|pytorch)\b", re.IGNORECASE)
 
-# Text cleaning
+# Clean text function
 def clean_text(text):
     text = re.sub(r"\n|<.*?>|\t|\r", " ", str(text))
     text = re.sub(r"\s+", " ", text).strip()
     return text.lower()
 
-# Extract requirements using spaCy
+# Extract requirement sentences
 def extract_requirements_spacy(text):
     text = clean_text(text)
     if pd.isna(text):
@@ -27,11 +27,14 @@ def extract_requirements_spacy(text):
     doc = nlp(text)
     requirements = []
     for sent in doc.sents:
-        if any(keyword in sent.text.lower() for keyword in ["requirement", "qualification", "must have", "need to", "should have", "skills", "experience", "looking for"]):
+        if any(keyword in sent.text.lower() for keyword in [
+            "requirement", "qualification", "must have", "need to",
+            "should have", "skills", "experience", "looking for"
+        ]):
             requirements.append(sent.text)
     return ' '.join(requirements) if requirements else None
 
-# Extract common skill mentions
+# Count skills
 def extract_common_requirements(df):
     all_requirements = ' '.join(df['Requirements'].dropna().apply(clean_text))
     skills = skill_patterns.findall(all_requirements)
@@ -39,7 +42,7 @@ def extract_common_requirements(df):
     sorted_skills = [skill for skill, _ in skill_counts.most_common()]
     return sorted_skills
 
-# Main job scraping function
+# Main function to scrape jobs and extract skills
 def get_skills(title, location):
     start = 0
     list_url = f"https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search?keywords={title}&location={location}&start={start}"
@@ -80,17 +83,21 @@ def get_skills(title, location):
 
     jobs_df = pd.DataFrame(job_list)
 
-    # ✅ Fix: Avoid KeyError if Summary is missing
     if 'Summary' in jobs_df.columns:
         jobs_df['Requirements'] = jobs_df['Summary'].apply(extract_requirements_spacy)
     else:
-        jobs_df['Requirements'] = None
+        jobs_df['Requirements'] = ""
 
     common_requirements = extract_common_requirements(jobs_df)
     return common_requirements
 
-# Flask App
+
+# Flask setup
 app = Flask(__name__)
+
+@app.route('/')
+def home():
+    return jsonify({"message": "Skill extractor API is running!"})
 
 @app.route('/<job_name>/<location>')
 def getSkills(job_name, location):
@@ -104,6 +111,7 @@ def getSkills(job_name, location):
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-# Optional for local testing
-if __name__ == "__main__":
-    app.run(debug=True)
+# Run on Railway's assigned port
+if __name__ == '__main__':
+    port = int(os.environ.get("PORT", 5000))
+    app.run(debug=True, host='0.0.0.0', port=port)
