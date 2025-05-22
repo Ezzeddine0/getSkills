@@ -1,5 +1,6 @@
-Flask
+flask
 requests
 beautifulsoup4
 pandas
 spacy
+gunicorn
